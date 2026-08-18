@@ -1,0 +1,7 @@
+ipykernel
+dataclasses
+pathlib
+astrapy
+python-dotenv
+sentence-transformers
+bm25
