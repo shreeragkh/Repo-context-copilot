@@ -5,3 +5,6 @@ astrapy
 python-dotenv
 sentence-transformers
 bm25
+markdown
+langchain-groq
+langchain-core
