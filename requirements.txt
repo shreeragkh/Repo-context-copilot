@@ -4,8 +4,9 @@ pathlib
 astrapy
 python-dotenv
 sentence-transformers
-bm25
+bm25s
 markdown
 langchain-groq
 langchain-core
 tiktoken
+redis
