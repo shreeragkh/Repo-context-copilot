@@ -8,3 +8,4 @@ bm25
 markdown
 langchain-groq
 langchain-core
+tiktoken
