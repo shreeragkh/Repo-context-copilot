@@ -1,0 +1,24 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-dotenv==1.0.1
+pydantic==2.9.2
+
+# Auth
+google-auth==2.34.0
+
+# Cache / scheduling
+redis==5.0.8
+apscheduler==3.10.4
+
+# Retrieval
+astrapy==1.4.2
+sentence-transformers==3.1.1
+bm25s==0.2.0
+
+# LLMs
+langchain-groq==0.2.0
+langchain-openai==0.2.0
+
+# Utils
+tiktoken==0.8.0
+gitpython==3.1.43

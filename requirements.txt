@@ -12,3 +12,7 @@ tiktoken
 redis
 langchain_aws
 langchain-openai
+fastapi
+uvicorn[standard]
+gitpython
+apscheduler==3.10.4
