@@ -10,3 +10,5 @@ langchain-groq
 langchain-core
 tiktoken
 redis
+langchain_aws
+langchain-openai
