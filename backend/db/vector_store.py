@@ -29,12 +29,16 @@ class VectorStore:
     be dropped in a single call when their TTL expires."""
 
     def __init__(self):
-        self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
-        self.client = DataAPIClient()
+        try:
+            self.model = SentenceTransformer(settings.EMBEDDING_MODEL, local_files_only=True)
+        except Exception:
+            self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        self.client = DataAPIClient(settings.API_TOKEN)
         self.db = self.client.get_database(
             api_endpoint=settings.API_ENDPOINT,
             token=settings.API_TOKEN,
         )
+
 
     def get_or_create_collection(self, collection_name: str):
         if collection_name not in self.db.list_collection_names():

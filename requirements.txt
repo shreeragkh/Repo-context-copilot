@@ -16,3 +16,5 @@ fastapi
 uvicorn[standard]
 gitpython
 apscheduler==3.10.4
+streamlit
+google-auth

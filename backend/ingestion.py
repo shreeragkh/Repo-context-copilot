@@ -89,6 +89,11 @@ def ingest_repo(repo_url: str) -> IngestedRepo:
             raise ValueError("No chunkable files found in this repository.")
 
         collection_name = sanitize_collection_name(repo_name)
+        if state.vector_store is not None:
+            try:
+                state.vector_store.drop_collection(collection_name)
+            except Exception:
+                pass
         state.vector_store.insert_chunks(chunks, collection_name=collection_name, commit_sha=commit_sha)
 
         bm25_dir = f"{settings.BM25_ROOT}/{repo_name}"

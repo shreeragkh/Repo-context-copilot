@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 enc = tiktoken.get_encoding("cl100k_base")
 
 ABSTENTION = "Cannot be determined from the provided repository context."
-RELEVANCE_THRESHOLD = -8.5
+RELEVANCE_THRESHOLD = -16.0
+
+
 MODEL_CONTEXT_WINDOW = 12000
 
 RETRIEVAL_BUDGET = {"LOW": 10, "MEDIUM": 20, "HIGH": 30}
@@ -192,8 +194,9 @@ def rag_pipeline(query: str, hybrid_search, reranker=None, top_k=None, top_n=Non
 
     model_info = {"model_name": "none", "provider": "none", "paid": False}
 
-    if not context or best_rerank_score < RELEVANCE_THRESHOLD:
+    if not context:
         answer = ABSTENTION
+
     else:
         prompt = f"""Answer the question using only the repository context below.
 
@@ -209,9 +212,16 @@ Question:
 
 Answer:"""
         try:
-            result = generation_router.invoke(prompt)
-            answer = re.sub(r"<think>.*?</think>", "", result.content, flags=re.DOTALL).strip() or ABSTENTION
-            model_info = {"model_name": result.model_name, "provider": result.provider, "paid": result.paid}
+            gen_res = generation_router.invoke(prompt)
+
+
+            raw_text = gen_res.content or ""
+            clean_text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL)
+            clean_text = re.sub(r"<think>.*$", "", clean_text, flags=re.DOTALL)
+            answer = clean_text.strip() or ABSTENTION
+
+            model_info = {"model_name": gen_res.model_name, "provider": gen_res.provider, "paid": gen_res.paid}
+
         except Exception as exc:
             return _empty_result(f"Generation failed: {exc}", complexity, complexity_conf, complexity_reason,
                                   fetch_k, return_context, context, model_info)

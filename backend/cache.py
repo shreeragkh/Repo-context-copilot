@@ -21,8 +21,12 @@ class RetrievalCache:
         )
 
     def _key(self, repo_name: str, commit_sha: str, query: str) -> str:
-        raw = f"{repo_name}:{commit_sha}:{query.strip().lower()}"
+        import re
+        norm_q = re.sub(r"[^\w\s]", "", query.strip().lower())
+        norm_q = re.sub(r"\s+", " ", norm_q)
+        raw = f"{repo_name}:{commit_sha}:{norm_q}"
         return "ragcache:" + hashlib.sha256(raw.encode()).hexdigest()
+
 
     def get(self, repo_name: str, commit_sha: str, query: str):
         try:

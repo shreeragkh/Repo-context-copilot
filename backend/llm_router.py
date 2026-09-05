@@ -120,12 +120,21 @@ class ModelRouter:
             content = "".join(
                 part.get("text", "") if isinstance(part, dict) else str(part) for part in content
             )
-        return str(content or "").strip()
+        text = str(content or "").strip()
+        import re
+        # Remove complete <think>...</think> blocks
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+        # Remove unclosed <think>... blocks if max_tokens truncated the response
+        text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL)
+        return text.strip()
+
+
 
 
 classifier_router = ModelRouter(
     purpose="classification", paid_model_name=settings.CLASSIFIER_PAID_MODEL, max_tokens=128,
 )
 generation_router = ModelRouter(
-    purpose="generation", paid_model_name=settings.GENERATION_PAID_MODEL, max_tokens=512,
+    purpose="generation", paid_model_name=settings.GENERATION_PAID_MODEL, max_tokens=1024,
 )
+

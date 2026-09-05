@@ -1,15 +1,22 @@
 """Centralized config. Import `settings` everywhere instead of calling os.getenv directly."""
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
 load_dotenv()
 
 
 class Settings:
     # Firebase
-    FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "")
-    FIREBASE_AUTH_DOMAIN = os.getenv("FIREBASE_AUTH_DOMAIN", "")
-    FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
+    FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY") or os.getenv("VITE_FIREBASE_API_KEY", "")
+    FIREBASE_AUTH_DOMAIN = os.getenv("FIREBASE_AUTH_DOMAIN") or os.getenv("VITE_FIREBASE_AUTH_DOMAIN", "")
+    FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("VITE_FIREBASE_PROJECT_ID", "")
+    FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET") or os.getenv("VITE_FIREBASE_STORAGE_BUCKET", "")
+    FIREBASE_MESSAGING_SENDER_ID = os.getenv("FIREBASE_MESSAGING_SENDER_ID") or os.getenv("VITE_FIREBASE_MESSAGING_SENDER_ID", "")
+    FIREBASE_APP_ID = os.getenv("FIREBASE_APP_ID") or os.getenv("VITE_FIREBASE_APP_ID", "")
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
 
     # AstraDB
