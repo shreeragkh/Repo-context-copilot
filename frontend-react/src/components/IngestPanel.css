@@ -1,0 +1,49 @@
+.ingest-panel {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.015);
+}
+
+.ingest-toggle {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 10px 24px; background: none; border: none;
+  color: var(--text-secondary); font-size: 13px; font-weight: 500;
+  cursor: pointer; text-align: left; transition: color var(--transition), background var(--transition);
+}
+.ingest-toggle:hover { color: var(--text-primary); background: var(--bg-hover); }
+.ingest-toggle svg:last-child { margin-left: auto; color: var(--text-muted); }
+
+.ingest-body { padding: 12px 24px 16px; display: flex; flex-direction: column; gap: 10px; animation: fadeUp 0.2s ease; }
+
+.ingest-form { display: flex; flex-direction: column; gap: 8px; }
+.ingest-input-row { display: flex; gap: 8px; }
+.ingest-input {
+  flex: 1; padding: 9px 14px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: var(--radius-md); color: var(--text-primary);
+  font-family: var(--font-sans); font-size: 13px; outline: none;
+  transition: border-color var(--transition);
+}
+.ingest-input:focus { border-color: var(--border-accent); }
+.ingest-input::placeholder { color: var(--text-muted); }
+.ingest-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ingest-btn {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  padding: 9px 18px; background: var(--grad-btn); border: none; border-radius: var(--radius-md);
+  color: white; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: opacity var(--transition), transform var(--transition);
+  box-shadow: 0 2px 10px rgba(59,130,246,0.35);
+}
+.ingest-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.ingest-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(59,130,246,0.5); }
+
+.ingest-status {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; padding: 8px 12px; border-radius: var(--radius-md);
+}
+.ingest-status.ingesting { color: var(--accent-blue); background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.2); }
+.ingest-status.done      { color: var(--accent-green); background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2); }
+.ingest-status.error     { color: var(--accent-red); background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
+
+.ingest-note { font-size: 11px; color: var(--text-muted); }

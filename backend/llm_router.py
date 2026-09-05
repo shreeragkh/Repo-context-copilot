@@ -137,4 +137,8 @@ classifier_router = ModelRouter(
 generation_router = ModelRouter(
     purpose="generation", paid_model_name=settings.GENERATION_PAID_MODEL, max_tokens=1024,
 )
+judge_router = ModelRouter(
+    purpose="judge", paid_model_name=settings.GENERATION_PAID_MODEL, max_tokens=16,
+)
+
 

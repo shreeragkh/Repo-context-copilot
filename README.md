@@ -14,12 +14,13 @@ Repo Context Copilot ingests a GitHub repository on-demand, indexes its code and
 | **Adaptive Context** | Query complexity classifier (LOW / MEDIUM / HIGH) dynamically sizes the retrieval budget |
 | **Cross-encoder Reranking** | `ms-marco-MiniLM-L-6-v2` re-orders candidates for maximum precision |
 | **Smart LLM Router** | Free Groq models with automatic cooldown + OpenAI paid fallback |
+| **LLM-as-a-Judge Eval** | Asynchronous answer quality scoring (0–1.0) comparing adaptive vs. baseline responses |
 | **Redis Caching** | 24-hour answer cache keyed by `repo + commit SHA + normalised query` |
 | **Multi-repo Support** | Multiple repositories ingested and queried simultaneously; each gets its own AstraDB collection |
 | **TTL Cleanup** | Ingested repos auto-expire and are fully purged (vector DB, BM25 index, cloned files) |
 | **Firebase Auth** | Google Sign-In via Firebase; admin-gated endpoints for logs, health, cache management |
 | **Comparison Mode** | Side-by-side adaptive vs. baseline (fixed top-k) answer logging for quality analysis |
-| **Streamlit UI** | Dark-themed, single-page interface with ingestion status, query, and admin panels |
+| **React.js & Streamlit UI** | Modern React (Vite + Tailwind/CSS + Lucide) single-page app + Streamlit fallback interface |
 
 ---
 
@@ -28,12 +29,12 @@ Repo Context Copilot ingests a GitHub repository on-demand, indexes its code and
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           USER BROWSER                                  │
-│                    Streamlit App  (port 8501)                           │
+│                 React.js App (port 5173) / Streamlit App (:8501)        │
 │        ┌────────────────────────────────────────────────────┐           │
-│        │  Ingest Panel  │  Query Panel  │  Admin Dashboard  │           │
+│        │  Ingest Panel  │  Query Chat   │  Admin Dashboard  │           │
 │        └────────────┬───────────┬───────────────┬───────────┘           │
 │                     │           │               │                        │
-│          POST /api/ingest  POST /api/query  GET /api/health etc.        │
+│          POST /api/ingest  POST /api/query  GET /api/logs etc.          │
 └─────────────────────┼───────────┼───────────────┼───────────────────────┘
                       │           │               │
                       ▼           ▼               ▼
@@ -51,8 +52,8 @@ Repo Context Copilot ingests a GitHub repository on-demand, indexes its code and
 │  │             │   │  4. AstraDB push │   │  5. Adaptive cutoff   │    │
 │  │  Admin-only │   │  5. BM25 build   │   │  6. Token budget trim │    │
 │  │  endpoints  │   │  6. Register in  │   │  7. LLM generation    │    │
-│  └─────────────┘   │     state        │   │  8. Redis cache write │    │
-│                    └──────────────────┘   └───────────────────────┘    │
+│  │  & logs     │   │     state        │   │  8. Async Eval Judge  │    │
+│  └─────────────┘   └──────────────────┘   └───────────────────────┘    │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │                    Shared In-Memory State                         │  │

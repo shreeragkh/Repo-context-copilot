@@ -45,6 +45,8 @@ class Settings:
     LOG_COMPARISON_MODE = os.getenv("LOG_COMPARISON_MODE", "true").lower() == "true"
     REPO_TTL_MINUTES = int(os.getenv("REPO_TTL_MINUTES", "60"))
     CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")]
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
 
     # Local paths
     TEMP_REPO_ROOT = os.getenv("TEMP_REPO_ROOT", "./temp/repos")

@@ -77,6 +77,9 @@ def record_query_log(
     baseline_tokens: int | None = None,
     cache_hit: bool = False,
     latency_ms: float = 0.0,
+    adaptive_score: float | None = None,
+    baseline_score: float | None = None,
+    eval_status: str = "pending",
 ) -> dict[str, Any]:
     reduction_pct = None
     if baseline_tokens and baseline_tokens > 0 and adaptive_tokens is not None:
@@ -99,10 +102,30 @@ def record_query_log(
         "model_tier": "paid" if model_paid else "free",
         "cache_hit": cache_hit,
         "latency_ms": round(latency_ms, 1),
+        "adaptive_score": adaptive_score,
+        "baseline_score": baseline_score,
+        "eval_status": eval_status,
     }
     with _qlock:
         _query_log.append(entry)
     return entry
+
+
+def update_query_log_scores(
+    timestamp: str,
+    adaptive_score: float | None,
+    baseline_score: float | None,
+    eval_status: str,
+) -> bool:
+    """Update scores and status of a query log entry matching timestamp."""
+    with _qlock:
+        for entry in _query_log:
+            if entry["timestamp"] == timestamp:
+                entry["adaptive_score"] = adaptive_score
+                entry["baseline_score"] = baseline_score
+                entry["eval_status"] = eval_status
+                return True
+    return False
 
 
 def get_query_logs(n: int = 100) -> list[dict[str, Any]]:
@@ -116,3 +139,4 @@ def clear_query_logs() -> int:
         count = len(_query_log)
         _query_log.clear()
     return count
+

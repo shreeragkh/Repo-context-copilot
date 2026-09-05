@@ -14,6 +14,7 @@ from cleanup import start_cleanup_scheduler, stop_cleanup_scheduler
 from config import settings
 from db import Reranker, VectorStore
 from ingestion import ingest_repo, repo_name_from_url
+from eval_harness import score_query_async
 from logging_utils import (
     clear_logs, clear_query_logs, get_query_logs, get_recent_logs,
     record_query_log, setup_logging,
@@ -323,7 +324,8 @@ def login_page():
       spinner.style.display = "none";
       status.innerHTML = "<span style='color:#34d399;'>\u2705 Authenticated! Closing\u2026</span>";
 
-      const targetUrl = "http://localhost:8501/?session_id=" + encodeURIComponent(data.session_id);
+      const targetUrl = "{settings.FRONTEND_URL}/?session_id=" + encodeURIComponent(data.session_id);
+
 
       if (window.opener && !window.opener.closed) {{
         try {{ window.opener.postMessage({{ type: "auth_success", session_id: data.session_id }}, "*"); }} catch(e) {{}}
@@ -463,14 +465,17 @@ def query_rag(req: QueryRequest, session: Optional[dict] = Depends(get_optional_
         baseline_chunks = baseline["final_chunk_count"]
 
     model_info = result.get("model_info", {})
-    record_query_log(
+    log_entry = record_query_log(
         query=req.query, is_admin=is_admin_user, complexity=result.get("complexity", "UNKNOWN"),
         adaptive_answer=result["answer"], adaptive_chunks=result["final_chunk_count"],
         adaptive_tokens=adaptive_tokens, model_name=model_info.get("model_name", "cache"),
         model_provider=model_info.get("provider", "cache"), model_paid=model_info.get("paid", False),
         baseline_answer=baseline_answer, baseline_chunks=baseline_chunks, baseline_tokens=baseline_tokens,
-        cache_hit=cache_hit, latency_ms=latency_ms,
+        cache_hit=cache_hit, latency_ms=latency_ms, eval_status="pending",
     )
+
+    baseline_ctx = baseline.get("context", "") if (settings.LOG_COMPARISON_MODE and not cache_hit and "baseline" in locals()) else None
+    score_query_async(log_entry, adaptive_context=result.get("context", ""), baseline_context=baseline_ctx, llm=getattr(state, "llm", None))
 
     if is_admin_user:
         return {
@@ -479,6 +484,7 @@ def query_rag(req: QueryRequest, session: Optional[dict] = Depends(get_optional_
             "cached": cache_hit, "model": model_info, "retrieval_chunks": result.get("final_chunk_count"),
         }
     return {"answer": result["answer"]}
+
 
 
 # ---------------------------------------------------------------------------
