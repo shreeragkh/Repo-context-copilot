@@ -66,7 +66,7 @@ def judge_answer(query: str, answer: str, context: str, llm: Any = None) -> floa
 
     prompt = JUDGE_PROMPT_TEMPLATE.format(
         query=query,
-        context=context[:4000] if context else "No context provided.",
+        context=context if context else "No context provided.",
         answer=answer[:2000],
     )
 
@@ -74,20 +74,26 @@ def judge_answer(query: str, answer: str, context: str, llm: Any = None) -> floa
         if llm is not None:
             if hasattr(llm, "invoke"):
                 response = llm.invoke(prompt)
+                print(f"[DEBUG] raw judge response: {response.content!r}")
                 res_text = getattr(response, "content", str(response)).strip()
             else:
                 res_text = str(llm(prompt)).strip()
         else:
             from llm_router import judge_router
             res = judge_router.invoke(prompt)
-            res_text = res.content
+            baseline_judge_response = res.content
+            print(f"[DEBUG-LIVE] raw judge response (baseline): {baseline_judge_response!r}")
+            res_text = baseline_judge_response
 
         match = re.search(r"(1\.0|0\.75|0\.50|0\.5|0\.25|0\.0|0)", res_text)
         if match:
             return float(match.group(1))
+        logger.warning(
+            "Judge LLM returned unparseable response (falling back to 0.5). Raw: %r", res_text
+        )
         return 0.5
     except Exception as e:
-        logger.error(f"Error during LLM judge execution: {e}")
+        logger.error("Judge LLM execution failed (falling back to 0.5): %s", e)
         return 0.5
 
 
@@ -109,10 +115,14 @@ def score_query_async(
             # Judge adaptive answer
             adaptive_score = judge_answer(query, adaptive_ans, adaptive_context, llm=llm)
 
-            # Judge baseline answer if present
+            # Judge baseline answer if present.
+            # Use baseline_context explicitly (even if empty string) — don't
+            # fall back to adaptive_context or both scores will be identical.
             baseline_score = None
             if baseline_ans:
-                ctx = baseline_context or adaptive_context
+                print(f"[DEBUG-LIVE] baseline_ctx is None: {baseline_context is None}, len={len(baseline_context) if baseline_context else 'N/A'}")
+                print(f"[DEBUG-LIVE] adaptive_ctx len={len(adaptive_context)}")
+                ctx = baseline_context if baseline_context is not None else adaptive_context
                 baseline_score = judge_answer(query, baseline_ans, ctx, llm=llm)
 
             update_query_log_scores(

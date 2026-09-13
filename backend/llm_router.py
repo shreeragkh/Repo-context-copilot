@@ -58,16 +58,18 @@ class _Cooldowns:
 
 
 class ModelRouter:
-    def __init__(self, purpose: str, paid_model_name: str, max_tokens: int = 512):
+    def __init__(self, purpose: str, paid_model_name: str, max_tokens: int = 512,
+                 extra_kwargs: dict | None = None):
         """purpose: free-text label used only for logging ('classification' | 'generation')."""
         self.purpose = purpose
         self.paid_model_name = paid_model_name
         self.max_tokens = max_tokens
         self.cooldowns = _Cooldowns()
+        _extra = extra_kwargs or {}
 
         self._free_clients: dict[str, ChatGroq] = {
             name: ChatGroq(model=name, temperature=0, max_tokens=max_tokens,
-                            api_key=settings.GROQ_API_KEY)
+                            api_key=settings.GROQ_API_KEY, **_extra)
             for name in settings.GROQ_FREE_MODELS
         }
         self._paid_client = ChatOpenAI(
@@ -138,7 +140,8 @@ generation_router = ModelRouter(
     purpose="generation", paid_model_name=settings.GENERATION_PAID_MODEL, max_tokens=1024,
 )
 judge_router = ModelRouter(
-    purpose="judge", paid_model_name=settings.GENERATION_PAID_MODEL, max_tokens=16,
+    purpose="judge", paid_model_name=settings.GENERATION_PAID_MODEL, max_tokens=512,
+    extra_kwargs={"reasoning_effort": "minimal"},
 )
 
 

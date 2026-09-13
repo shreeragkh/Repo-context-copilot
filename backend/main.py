@@ -446,7 +446,7 @@ def query_rag(req: QueryRequest, session: Optional[dict] = Depends(get_optional_
     else:
         result = rag_pipeline(
             req.query, hybrid_search=repo.hybrid_search, reranker=state.reranker,
-            top_k=req.top_k, top_n=req.top_n, min_score=req.min_score, return_context=True,
+            top_k=req.top_k or 20, top_n=req.top_n or 10, min_score=req.min_score, return_context=True,
         )
         if state.cache and result.get("answer") and "Generation failed" not in result["answer"]:
             state.cache.set(repo.repo_name, repo.commit_sha, req.query, result)
@@ -455,13 +455,15 @@ def query_rag(req: QueryRequest, session: Optional[dict] = Depends(get_optional_
     adaptive_tokens = count_tokens(result.get("context", ""))
 
     baseline_answer = baseline_tokens = baseline_chunks = None
+    baseline_ctx = None
     if settings.LOG_COMPARISON_MODE and not cache_hit:
         baseline = rag_pipeline(
             req.query, hybrid_search=repo.hybrid_search, reranker=state.reranker,
             top_k=20, top_n=10, use_adaptive=False, return_context=True,
         )
         baseline_answer = baseline["answer"]
-        baseline_tokens = count_tokens(baseline.get("context", ""))
+        baseline_ctx = baseline.get("context", "") or ""
+        baseline_tokens = count_tokens(baseline_ctx)
         baseline_chunks = baseline["final_chunk_count"]
 
     model_info = result.get("model_info", {})
@@ -474,7 +476,6 @@ def query_rag(req: QueryRequest, session: Optional[dict] = Depends(get_optional_
         cache_hit=cache_hit, latency_ms=latency_ms, eval_status="pending",
     )
 
-    baseline_ctx = baseline.get("context", "") if (settings.LOG_COMPARISON_MODE and not cache_hit and "baseline" in locals()) else None
     score_query_async(log_entry, adaptive_context=result.get("context", ""), baseline_context=baseline_ctx, llm=getattr(state, "llm", None))
 
     if is_admin_user:

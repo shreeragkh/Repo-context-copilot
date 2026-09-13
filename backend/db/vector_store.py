@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 from dataclasses import asdict
 from typing import Any
@@ -52,23 +53,40 @@ class VectorStore:
             logger.info("Created AstraDB collection %s", collection_name, extra={"component": "vector_store"})
         return self.db.get_collection(collection_name)
 
+    @staticmethod
+    def _vector_norm(vec: list[float]) -> float:
+        return math.sqrt(sum(v * v for v in vec))
+
     def insert_chunks(self, chunks: list[Chunk], collection_name: str, commit_sha: str,
-                       batch_size: int = 50) -> int:
+                       batch_size: int = 50, min_vector_norm: float = 1e-6) -> int:
         collection = self.get_or_create_collection(collection_name)
         texts = [c.content for c in chunks]
         vectors = self.model.encode(
             texts, normalize_embeddings=True, show_progress_bar=False, batch_size=32,
         ).tolist()
 
-        documents = [
-            {"_id": c.chunk_id, "$vector": vec, "commit_sha": commit_sha, **asdict(c)}
-            for vec, c in zip(vectors, chunks)
-        ]
+        # AstraDB rejects near-zero vectors with cosine similarity — skip them.
+        documents = []
+        skipped = 0
+        for vec, c in zip(vectors, chunks):
+            if self._vector_norm(vec) < min_vector_norm:
+                logger.warning(
+                    "Skipping chunk %s: near-zero embedding vector (norm < %s)",
+                    c.chunk_id, min_vector_norm, extra={"component": "vector_store"},
+                )
+                skipped += 1
+                continue
+            documents.append({"_id": c.chunk_id, "$vector": vec, "commit_sha": commit_sha, **asdict(c)})
+
+        if skipped:
+            logger.info("Skipped %d near-zero-vector chunks out of %d total",
+                        skipped, len(chunks), extra={"component": "vector_store"})
 
         inserted = 0
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i + batch_size]
-            result = collection.insert_many(batch, request_timeout_ms=30000)
+            # ordered=False: don't abort the whole batch if one document fails
+            result = collection.insert_many(batch, ordered=False, request_timeout_ms=30000)
             inserted += len(result.inserted_ids)
         logger.info("Inserted %d chunks into collection %s", inserted, collection_name,
                     extra={"component": "vector_store"})
