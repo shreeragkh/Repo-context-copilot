@@ -28,7 +28,7 @@ export default function Navbar({
       {/* Brand */}
       <div className="navbar-brand">
         <Zap size={22} className="brand-icon" />
-        <span className="brand-name text-gradient">Repo Context Copilot</span>
+        <span className="brand-name text-gradient">Chat With Your Repo</span>
         <span className="brand-tag">Hybrid RAG</span>
       </div>
 
