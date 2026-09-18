@@ -18,3 +18,16 @@ gitpython
 apscheduler==3.10.4
 streamlit
 google-auth
+
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.11.0
+sentence-transformers
+astrapy
+bm25s
+fastapi
+uvicorn[standard]
+redis
+python-dotenv
+langchain-openai
+tiktoken
