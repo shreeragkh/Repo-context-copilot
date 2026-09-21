@@ -9,6 +9,8 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 60 * 60 * 24  # 24h; also hard-purged when a repo expires
+# Keyed on model + chunk size so a re-chunk/re-embed never serves stale answers.
+INDEX_VERSION = f"{settings.EMBEDDING_MODEL}:{settings.MAX_CHUNK_CHARS}"
 
 
 class RetrievalCache:
@@ -21,10 +23,7 @@ class RetrievalCache:
         )
 
     def _key(self, repo_name: str, commit_sha: str, query: str) -> str:
-        import re
-        norm_q = re.sub(r"[^\w\s]", "", query.strip().lower())
-        norm_q = re.sub(r"\s+", " ", norm_q)
-        raw = f"{repo_name}:{commit_sha}:{norm_q}"
+        raw = f"{repo_name}:{commit_sha}:{INDEX_VERSION}:{query.strip().lower()}"
         return "ragcache:" + hashlib.sha256(raw.encode()).hexdigest()
 
 

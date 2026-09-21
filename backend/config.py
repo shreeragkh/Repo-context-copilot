@@ -52,8 +52,17 @@ class Settings:
     TEMP_REPO_ROOT = os.getenv("TEMP_REPO_ROOT", "./temp/repos")
     BM25_ROOT = os.getenv("BM25_ROOT", "./bm25_index")
 
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
-    RERANKER_MODEL = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    # Embeddings: bge-base @256 ingests ~3x faster than bge-large with equal post-rerank quality.
+    EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
+    EMBED_DIM = 768
+    EMBED_MAX_SEQ = 256
+    RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+    # Chunking
+    MAX_CHUNK_CHARS = 1500
+
+    # Pipeline thresholds (tuned to MiniLM cross-encoder raw logits; recalibrate if reranker changes)
+    RELEVANCE_THRESHOLD = -8.5
 
 
 settings = Settings()

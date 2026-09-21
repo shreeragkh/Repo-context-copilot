@@ -5,6 +5,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from config import settings
+
+MAX_CHUNK_CHARS = settings.MAX_CHUNK_CHARS
+
 CODE_ONLY_MAP = {
     ".py": "python", ".js": "javascript", ".jsx": "javascript",
     ".ts": "typescript", ".tsx": "typescript", ".java": "java",
@@ -20,8 +24,7 @@ EXCLUDE_PATTERNS = re.compile(r"\.min\.(js|css)$|\.d\.ts$|_pb2\.py$")
 DOC_EXTENSIONS = {".md": "markdown", ".rst": "restructuredtext", ".txt": "text"}
 PRIORITY_DOC_FILENAMES = {"readme.md", "readme.rst", "readme.txt", "readme"}
 
-MAX_CHUNK_CHARS = 3000
-
+# Regex symbol splitters for non-Python languages (Python uses the AST instead).
 GENERIC_FUNC_PATTERNS = {
     "javascript": re.compile(r"^\s*(export\s+)?(async\s+)?function\s+(\w+)|^\s*(export\s+)?class\s+(\w+)|^\s*const\s+(\w+)\s*=\s*(async\s*)?\("),
     "typescript": re.compile(r"^\s*(export\s+)?(async\s+)?function\s+(\w+)|^\s*(export\s+)?class\s+(\w+)|^\s*const\s+(\w+)\s*=\s*(async\s*)?\("),
@@ -41,7 +44,7 @@ class Chunk:
     repo: str
     file_path: str
     language: str
-    symbol_type: str
+    symbol_type: str  # function | class | method | constant | block | doc_section
     symbol_name: str
     start_line: int
     end_line: int
@@ -63,9 +66,7 @@ def discover_files(repo_dir: Path, max_file_kb: int = 500) -> list[Path]:
             if fn in EXCLUDE_FILENAMES or EXCLUDE_PATTERNS.search(fn):
                 continue
             ext = Path(fn).suffix.lower()
-            is_code = ext in CODE_ONLY_MAP
-            is_doc = ext in DOC_EXTENSIONS or fn.lower() in PRIORITY_DOC_FILENAMES
-            if not (is_code or is_doc):
+            if not (ext in CODE_ONLY_MAP or ext in DOC_EXTENSIONS or fn.lower() in PRIORITY_DOC_FILENAMES):
                 continue
             full = Path(root) / fn
             try:
@@ -77,40 +78,40 @@ def discover_files(repo_dir: Path, max_file_kb: int = 500) -> list[Path]:
     return files
 
 
-def split_oversized(chunk: Chunk, max_chars: int = MAX_CHUNK_CHARS) -> list[Chunk]:
+def split_oversized(chunk: "Chunk", max_chars: int = MAX_CHUNK_CHARS) -> list["Chunk"]:
+    """Split a chunk into `<name>_partN` pieces of roughly max_chars each."""
     if chunk.char_count <= max_chars:
         return [chunk]
-    lines = chunk.content.splitlines()
     out, buf, buf_start, cur_len = [], [], chunk.start_line, 0
-    for i, line in enumerate(lines):
+
+    def emit():
+        src = "\n".join(buf)
+        out.append(Chunk(chunk.repo, chunk.file_path, chunk.language, chunk.symbol_type,
+                         f"{chunk.symbol_name}_part{len(out) + 1}", buf_start,
+                         buf_start + len(buf) - 1, src, len(src)))
+
+    for i, line in enumerate(chunk.content.splitlines()):
         buf.append(line)
         cur_len += len(line) + 1
         if cur_len >= max_chars:
-            src = "\n".join(buf)
-            out.append(Chunk(chunk.repo, chunk.file_path, chunk.language, chunk.symbol_type,
-                              f"{chunk.symbol_name}_part{len(out)+1}", buf_start,
-                              buf_start + len(buf) - 1, src, len(src)))
+            emit()
             buf, buf_start, cur_len = [], chunk.start_line + i + 1, 0
     if buf:
-        src = "\n".join(buf)
-        out.append(Chunk(chunk.repo, chunk.file_path, chunk.language, chunk.symbol_type,
-                          f"{chunk.symbol_name}_part{len(out)+1}", buf_start,
-                          buf_start + len(buf) - 1, src, len(src)))
+        emit()
     return out
 
 
-def chunk_generic_lines(path: Path, repo_name: str, text: str, language: str, window: int = 60, overlap: int = 10) -> list[Chunk]:
+def chunk_generic_lines(path: Path, repo_name: str, text: str, language: str,
+                        window: int = 60, overlap: int = 10) -> list[Chunk]:
+    """Sliding-window fallback for files without symbol-level parsing."""
     lines = text.splitlines()
-    chunks = []
-    i, n = 0, len(lines)
-    if n == 0:
-        return chunks
+    chunks, i, n = [], 0, len(lines)
     while i < n:
         end = min(i + window, n)
         src = "\n".join(lines[i:end])
         if src.strip():
             chunks.append(Chunk(repo_name, str(path), language, "block",
-                                 f"lines_{i+1}-{end}", i + 1, end, src, len(src)))
+                                f"lines_{i + 1}-{end}", i + 1, end, src, len(src)))
         if end == n:
             break
         i += window - overlap
@@ -120,8 +121,8 @@ def chunk_generic_lines(path: Path, repo_name: str, text: str, language: str, wi
 def chunk_markdown_file(path: Path, repo_name: str) -> list[Chunk]:
     text = path.read_text(encoding="utf-8", errors="ignore")
     lines = text.splitlines()
-    header_pattern = re.compile(r"^#{1,3}\s+(.+)")
-    starts = [i for i, line in enumerate(lines) if header_pattern.match(line)]
+    header = re.compile(r"^#{1,3}\s+(.+)")
+    starts = [i for i, line in enumerate(lines) if header.match(line)]
     if not starts:
         return chunk_generic_lines(path, repo_name, text, "markdown", window=80, overlap=10)
 
@@ -131,13 +132,21 @@ def chunk_markdown_file(path: Path, repo_name: str) -> list[Chunk]:
         while end > start and not lines[end].strip():
             end -= 1
         src = "\n".join(lines[start:end + 1])
-        name = header_pattern.match(lines[start]).group(1).strip()
+        name = header.match(lines[start]).group(1).strip()
         chunks.append(Chunk(repo_name, str(path), "markdown", "doc_section",
-                             name, start + 1, end + 1, src, len(src)))
+                            name, start + 1, end + 1, src, len(src)))
     return chunks
 
 
+def _node_start(node) -> int:
+    """First line of a node including its decorators (ast gives the `def` line otherwise)."""
+    return min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
+
+
 def chunk_python_file(path: Path, repo_name: str) -> list[Chunk]:
+    """One chunk per function / method / constant. Classes with methods get a header-only chunk
+    (docstring + attributes) plus one chunk per method, so code is never indexed twice.
+    Remaining top-level code becomes contiguous `module_level_<start>-<end>` blocks."""
     text = path.read_text(encoding="utf-8", errors="ignore")
     lines = text.splitlines()
     try:
@@ -147,50 +156,55 @@ def chunk_python_file(path: Path, repo_name: str) -> list[Chunk]:
 
     chunks, covered = [], set()
 
-    def node_source(node):
-        start = node.lineno
-        end = getattr(node, "end_lineno", start)
+    def add(kind, name, start, end):
         covered.update(range(start, end + 1))
-        return start, end, "\n".join(lines[start - 1:end])
-
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            start, end, src = node_source(node)
-            chunks.append(Chunk(repo_name, str(path), "python", "function", node.name, start, end, src, len(src)))
-        elif isinstance(node, ast.ClassDef):
-            start, end, src = node_source(node)
-            chunks.append(Chunk(repo_name, str(path), "python", "class", node.name, start, end, src, len(src)))
-            for sub in node.body:
-                if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    s2, e2, src2 = node_source(sub)
-                    chunks.append(Chunk(repo_name, str(path), "python", "method",
-                                         f"{node.name}.{sub.name}", s2, e2, src2, len(src2)))
-        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
-            start, end, src = node_source(node)
-            if isinstance(node, ast.Assign) and node.targets:
-                name = getattr(node.targets[0], "id", "constant")
-            elif isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None):
-                name = node.target.id
-            else:
-                name = "constant"
-            chunks.append(Chunk(repo_name, str(path), "python", "constant", name, start, end, src, len(src)))
-
-    leftover = [i + 1 for i in range(len(lines)) if (i + 1) not in covered]
-    if leftover:
-        start, end = min(leftover), max(leftover)
         src = "\n".join(lines[start - 1:end])
-        if src.strip():
-            chunks.append(Chunk(repo_name, str(path), "python", "block", "module_level", start, end, src, len(src)))
+        chunks.append(Chunk(repo_name, str(path), "python", kind, name, start, end, src, len(src)))
+
+    funcs = (ast.FunctionDef, ast.AsyncFunctionDef)
+    for node in tree.body:
+        start, end = _node_start(node), node.end_lineno
+        if isinstance(node, funcs):
+            add("function", node.name, start, end)
+        elif isinstance(node, ast.ClassDef):
+            methods = [s for s in node.body if isinstance(s, funcs)]
+            if methods:
+                header_end = _node_start(methods[0]) - 1
+                if header_end >= start:
+                    add("class", node.name, start, header_end)
+                for sub in methods:
+                    add("method", f"{node.name}.{sub.name}", _node_start(sub), sub.end_lineno)
+            else:
+                add("class", node.name, start, end)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            target = node.targets[0] if isinstance(node, ast.Assign) else node.target
+            add("constant", getattr(target, "id", "constant"), start, end)
+
+    # Flush contiguous runs of uncovered lines as module-level blocks
+    run = []
+
+    def flush():
+        if run:
+            body = lines[run[0] - 1:run[-1]]
+            if any(l.strip() and not l.strip().startswith("#") for l in body):
+                src = "\n".join(body)
+                chunks.append(Chunk(repo_name, str(path), "python", "block",
+                                    f"module_level_{run[0]}-{run[-1]}", run[0], run[-1], src, len(src)))
+            run.clear()
+
+    for ln in range(1, len(lines) + 1):
+        if ln in covered:
+            flush()
+        else:
+            run.append(ln)
+    flush()
     return chunks
 
 
 def chunk_generic_symbols(path: Path, repo_name: str, language: str) -> list[Chunk]:
     text = path.read_text(encoding="utf-8", errors="ignore")
     lines = text.splitlines()
-    pattern = GENERIC_FUNC_PATTERNS.get(language)
-    if pattern is None:
-        return chunk_generic_lines(path, repo_name, text, language)
-
+    pattern = GENERIC_FUNC_PATTERNS[language]
     starts = [i for i, line in enumerate(lines) if pattern.search(line)]
     if not starts:
         return chunk_generic_lines(path, repo_name, text, language)
@@ -203,7 +217,8 @@ def chunk_generic_symbols(path: Path, repo_name: str, language: str) -> list[Chu
         src = "\n".join(lines[start:end + 1])
         m = pattern.search(lines[start])
         name = next((g for g in m.groups() if g and re.match(r"^\w+$", g)), "anonymous")
-        chunks.append(Chunk(repo_name, str(path), language, "function", name, start + 1, end + 1, src, len(src)))
+        chunks.append(Chunk(repo_name, str(path), language, "function",
+                            name, start + 1, end + 1, src, len(src)))
     return chunks
 
 
@@ -216,16 +231,11 @@ def chunk_file(path: Path, repo_name: str) -> list[Chunk]:
         return chunk_generic_symbols(path, repo_name, language)
     if ext == ".md" or path.name.lower().startswith("readme"):
         return chunk_markdown_file(path, repo_name)
-    if ext in DOC_EXTENSIONS:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        return chunk_generic_lines(path, repo_name, text, DOC_EXTENSIONS[ext])
     text = path.read_text(encoding="utf-8", errors="ignore")
-    return chunk_generic_lines(path, repo_name, text, language)
+    return chunk_generic_lines(path, repo_name, text, DOC_EXTENSIONS.get(ext, language))
 
 
 def chunk_repo(repo_dir: Path, repo_name: str) -> list[Chunk]:
-    all_chunks = []
-    for f in discover_files(repo_dir):
-        for c in chunk_file(f, repo_name):
-            all_chunks.extend(split_oversized(c))
-    return all_chunks
+    return [piece for f in discover_files(repo_dir)
+            for c in chunk_file(f, repo_name)
+            for piece in split_oversized(c)]

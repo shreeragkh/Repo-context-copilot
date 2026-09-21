@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV HF_HOME=/app/.hf_cache
 RUN python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; \
-    SentenceTransformer('BAAI/bge-large-en-v1.5'); \
+    SentenceTransformer('BAAI/bge-base-en-v1.5');\
     CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 
 COPY backend/ ./backend

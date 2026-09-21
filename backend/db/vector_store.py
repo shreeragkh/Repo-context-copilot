@@ -34,6 +34,7 @@ class VectorStore:
             self.model = SentenceTransformer(settings.EMBEDDING_MODEL, local_files_only=True)
         except Exception:
             self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        self.model.max_seq_length = settings.EMBED_MAX_SEQ
         self.client = DataAPIClient(settings.API_TOKEN)
         self.db = self.client.get_database(
             api_endpoint=settings.API_ENDPOINT,
@@ -45,7 +46,7 @@ class VectorStore:
         if collection_name not in self.db.list_collection_names():
             definition = (
                 CollectionDefinition.builder()
-                .with_vector_dimension(1024)
+                .with_vector_dimension(settings.EMBED_DIM)
                 .with_vector_metric(VectorMetric.COSINE)
                 .build()
             )
@@ -61,9 +62,13 @@ class VectorStore:
                        batch_size: int = 50, min_vector_norm: float = 1e-6) -> int:
         collection = self.get_or_create_collection(collection_name)
         texts = [c.content for c in chunks]
+        logger.info("Starting embedding for %d chunks...", len(texts),
+                extra={"component": "vector_store"})
         vectors = self.model.encode(
             texts, normalize_embeddings=True, show_progress_bar=False, batch_size=32,
         ).tolist()
+        logger.info("Embedding complete for %d chunks.", len(texts),
+                extra={"component": "vector_store"})
 
         # AstraDB rejects near-zero vectors with cosine similarity — skip them.
         documents = []

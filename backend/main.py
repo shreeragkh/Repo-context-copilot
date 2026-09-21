@@ -368,7 +368,7 @@ def verify_token(req: TokenVerifyRequest):
     picture = claims.get("picture", "")
 
     if not auth.is_admin(email):
-        return {"error": f"Access denied. '{email}' is not the authorized admin ({settings.ADMIN_EMAIL}).", "session_id": None}
+        return {"error": f"Access denied. '{email}' is not the authorized admin.", "session_id": None}
 
     session_id = auth.create_session(email, uid, name, picture)
     return {

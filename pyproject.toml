@@ -17,6 +17,7 @@ dependencies = [
     "langchain-openai>=1.5.2",
     "markdown>=3.10.3",
     "openai>=3.3.0",
+    "pandas>=3.0.6",
     "pathlib>=1.0.1",
     "python-dotenv>=1.2.3",
     "redis>=8.1.0",
