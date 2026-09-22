@@ -1,4 +1,4 @@
-# 💬 Chat With Your Repo
+# 💬 Repo Context Copilot
 
 > **Ask natural-language questions about any public GitHub repository — powered by Hybrid Search RAG with adaptive context, LLM-as-a-Judge evaluation, and smart cost routing.**
 
@@ -6,7 +6,7 @@
 
 ## ✨ What It Does
 
-**Chat With Your Repo** lets you point to any public GitHub URL and immediately start asking questions about the code. It doesn't just do keyword search — it understands your intent through a multi-stage pipeline:
+**Repo Context Copilot** lets you point to any public GitHub URL and immediately start asking questions about the code. It doesn't just do keyword search — it understands your intent through a multi-stage pipeline:
 
 1. **Classifies** how complex your question is (LOW / MEDIUM / HIGH)
 2. **Retrieves** the most relevant code chunks using both BM25 (keyword) and vector (semantic) search in parallel
@@ -54,13 +54,13 @@ flowchart TD
     end
 
     subgraph STORAGE["💾 Storage"]
-        ASTRA["🗄️ AstraDB (Vector DB)\nBAAI/bge-large-en-v1.5\nOne collection per repo"]
+        ASTRA["🗄️ AstraDB (Vector DB)\nBAAI/bge-base-en-v1.5\nOne collection per repo"]
         BM25S["📁 BM25 Index\nLocal filesystem\nbm25_index/repo/"]
         REDIS["🔴 Redis\nlocalhost:6379\nCache TTL: 24h"]
     end
 
     subgraph LLM["🤖 LLM Router"]
-        GROQ["🟢 Groq Free Tier\nllama-3.3-70b-versatile\nqwen/qwen3-32b\nround-robin + cooldown"]
+        GROQ["🟢 Groq Free Tier\ngroq/compound-mini\nqwen/qwen3.6-27b\nopenai/gpt-oss-20b\nround-robin + cooldown"]
         OAI["💳 OpenAI Paid Fallback\ngpt-5-nano (classifier)\ngpt-5-mini (generator)"]
         GROQ -->|rate-limited| OAI
     end
@@ -121,9 +121,11 @@ Repo-context-copilot/
 │
 ├── bm25_index/                   # Persisted BM25 indexes (one dir per repo)
 ├── temp/repos/                   # Shallow-cloned repos (auto-purged after TTL)
+├── Dockerfile                    # Docker image for backend deployment
 ├── .env                          # Environment variables (see setup below)
 ├── run.sh                        # One-command startup script
-└── requirements.txt              # Python dependencies
+├── pyproject.toml                # Python project metadata & dependencies
+└── requirements.txt              # Python dependencies (pip-compatible)
 ```
 
 ---
@@ -143,10 +145,10 @@ GitHub URL
   ├── Python: AST-based (class / function / method boundaries)
   ├── JS/TS/Go/Java/Rust/C/C++: Regex function/class boundaries
   ├── Markdown/RST/TXT: Section-level splits
-  └── Max chunk: 3000 chars, with metadata (file_path, symbol_name, lines)
+  └── Max chunk: 1500 chars, with metadata (file_path, symbol_name, lines)
     │
     ▼
-[Embedding]  BAAI/bge-large-en-v1.5  →  AstraDB collection (one per repo)
+[Embedding]  BAAI/bge-base-en-v1.5 (768-dim, max seq 256)  →  AstraDB collection (one per repo)
     │
     ▼
 [BM25 Index]  Saved to  bm25_index/<repo>/
@@ -199,7 +201,8 @@ User question: "How does authentication work?"
 [6. Token Budget Trimmer — pipeline.py]
   ├── Context window: 12,000 tokens  (MODEL_CONTEXT_WINDOW)
   ├── Reserved for output: 512 tokens
-  ├── Overhead (prompt + query): ~150 tokens
+  ├── Safety margin: 200 tokens
+  ├── Overhead: tiktoken(query) + ~80 tokens
   └── Greedily includes chunks until budget is exhausted
     │
     ▼
@@ -325,7 +328,7 @@ To protect free-tier database limits every ingested repo has a **1-hour TTL** (c
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.13+
 - Node.js 18+
 - Redis running locally (`redis-server` or via Docker)
 - [DataStax AstraDB](https://astra.datastax.com/) account (free tier is fine)
@@ -355,7 +358,7 @@ cd ..
 # ── LLM ────────────────────────────────────────────────────────────────────
 GROQ_API_KEY=your_groq_api_key
 OPENAI_API_KEY=your_openai_key      # Optional — used only when Groq is exhausted
-GROQ_FREE_MODELS=llama-3.3-70b-versatile,qwen/qwen3-32b
+GROQ_FREE_MODELS=groq/compound-mini,qwen/qwen3.6-27b,openai/gpt-oss-20b
 CLASSIFIER_PAID_MODEL=gpt-5-nano
 GENERATION_PAID_MODEL=gpt-5-mini
 
@@ -369,12 +372,12 @@ REDIS_PORT=6379
 REDIS_PASSWORD=                     # Leave blank for local Redis
 
 # ── Firebase (Google Auth) ──────────────────────────────────────────────────
-FIREBASE_API_KEY=...
-FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-FIREBASE_MESSAGING_SENDER_ID=...
-FIREBASE_APP_ID=...
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
 ADMIN_EMAIL=your.email@gmail.com
 
 # ── Behaviour ───────────────────────────────────────────────────────────────
@@ -384,7 +387,7 @@ FRONTEND_URL=http://localhost:5173
 CORS_ORIGINS=http://localhost:5173
 
 # ── Models (downloaded from HuggingFace on first run) ──────────────────────
-EMBEDDING_MODEL=BAAI/bge-large-en-v1.5
+EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
 RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
 ```
 
@@ -411,14 +414,35 @@ Open **http://localhost:5173** in your browser.
 
 ---
 
+## 🐳 Docker (Backend only)
+
+The `Dockerfile` builds a self-contained backend image with models pre-baked into the image layer (so the first request is not slow):
+
+```bash
+# Build
+docker build -t repo-context-copilot .
+
+# Run (pass your .env variables)
+docker run --env-file .env -p 8080:8080 repo-context-copilot
+```
+
+The backend listens on `$PORT` (default `8080`) inside the container.
+You still need Redis and AstraDB accessible from within the container — adjust `REDIS_HOST` accordingly.
+
+> **Note**: The Docker image bakes `BAAI/bge-base-en-v1.5` and `cross-encoder/ms-marco-MiniLM-L-6-v2` at build time and sets `HF_HUB_OFFLINE=1` at runtime so no internet access is needed for model loading.
+
+---
+
 ## 📡 API Reference
 
 All endpoints are served at `http://localhost:8000`.
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/auth/login` | Public | Google OAuth popup page |
+| `GET` | `/auth/login` | Public | Google OAuth popup page (auto-triggers sign-in) |
+| `GET` | `/auth/button` | Public | Embeddable sign-in button component (iframe) |
 | `POST` | `/auth/verify` | Public | Exchange Firebase ID token for a session |
+| `POST` | `/auth/admin-login` | Public | Direct admin login by email (no Firebase token) |
 | `GET` | `/auth/me` | Session | Get current user profile |
 | `POST` | `/auth/logout` | Session | Destroy session |
 | `GET` | `/api/repos` | Public | List currently ingested repos |
@@ -441,9 +465,9 @@ Interactive Swagger docs: **http://localhost:8000/docs**
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React 18, Vite, Lucide icons |
-| **Backend** | FastAPI, Python 3.10+, Uvicorn |
-| **Embeddings** | `BAAI/bge-large-en-v1.5` — HuggingFace, 1024-dim |
+| **Frontend** | React 19, Vite 8, Lucide icons, react-markdown, react-syntax-highlighter |
+| **Backend** | FastAPI, Python 3.13+, Uvicorn |
+| **Embeddings** | `BAAI/bge-base-en-v1.5` — HuggingFace, 768-dim, max seq 256 |
 | **Vector DB** | DataStax AstraDB (cosine similarity) |
 | **BM25** | `bm25s` — local filesystem index |
 | **Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
@@ -452,6 +476,7 @@ Interactive Swagger docs: **http://localhost:8000/docs**
 | **Auth** | Firebase Google OAuth — no service account needed |
 | **Scheduler** | APScheduler — daemon thread, 2-min check interval |
 | **Token counting** | `tiktoken` — cl100k_base encoding |
+| **Containerisation** | Docker (Python 3.11-slim base, models pre-baked) |
 
 ---
 
